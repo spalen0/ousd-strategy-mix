@@ -4,9 +4,9 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {Strategy, ERC20} from "../../Strategy.sol";
-import {StrategyFactory} from "../../StrategyFactory.sol";
+import {MorphoOusd, ERC20, Id} from "../../MorphoOusd.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {IMetaMorpho} from "../../interfaces/Morpho/IMetaMorpho.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -24,7 +24,7 @@ contract Setup is Test, IEvents {
     ERC20 public asset;
     IStrategyInterface public strategy;
 
-    StrategyFactory public strategyFactory;
+    MorphoOusd public morphoOusd;
 
     mapping(string => address) public tokenAddrs;
 
@@ -34,9 +34,6 @@ contract Setup is Test, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public emergencyAdmin = address(5);
-
-    // Address of the real deployed Factory
-    address public factory;
 
     // Integer variables that will be used repeatedly.
     uint256 public decimals;
@@ -49,30 +46,36 @@ contract Setup is Test, IEvents {
     // Default profit max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 10 days;
 
+    address public MORPHO = 0x9D03bb2092270648d7480049d0E58d2FcF0E5123;
+
+    address public swapToken;
+
+    address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
+
+    address public OUSD = 0x2A8e1E676Ec238d8A992307B495b45B3fEAa5e86;
+
+    // Yearn USDC vault
+    address public vault;
+
     function setUp() public virtual {
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        asset = ERC20(tokenAddrs["USDC"]);
+        minFuzzAmount = 1e6;
+        maxFuzzAmount = 100_000e6;
+
+        vault = 0xF9bdDd4A9b3A45f980e11fDDE96e16364dDBEc49;
+        user = OUSD;
 
         // Set decimals
         decimals = asset.decimals();
 
-        strategyFactory = new StrategyFactory(
-            management,
-            performanceFeeRecipient,
-            keeper,
-            emergencyAdmin
-        );
-
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
 
-        factory = strategy.FACTORY();
-
         // label all the used addresses for traces
         vm.label(keeper, "keeper");
-        vm.label(factory, "factory");
         vm.label(address(asset), "asset");
         vm.label(management, "management");
         vm.label(address(strategy), "strategy");
@@ -80,18 +83,43 @@ contract Setup is Test, IEvents {
     }
 
     function setUpStrategy() public returns (address) {
+        // MORPHO token
+        swapToken = tokenAddrs["MORPHO"];
+
         // we save the strategy as a IStrategyInterface to give it the needed interface
         IStrategyInterface _strategy = IStrategyInterface(
             address(
-                strategyFactory.newStrategy(
+                new MorphoOusd(
                     address(asset),
-                    "Tokenized Strategy"
+                    "Morpho OUSD Strategy",
+                    vault,
+                    OUSD
                 )
+            )
+        );
+
+        // set keeper
+        _strategy.setKeeper(keeper);
+        // set treasury
+        _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
+        // set management of the strategy
+        _strategy.setPendingManagement(management);
+        _strategy.setEmergencyAdmin(SMS);
+        _strategy.setProfitMaxUnlockTime(60 * 60 * 24 * 3);
+        // set to idle market
+        MorphoOusd(address(_strategy)).setSupplyMarketId(
+            Id.wrap(
+                0x54efdee08e272e929034a8f26f7ca34b1ebe364b275391169b28c6d7db24dbc8
             )
         );
 
         vm.prank(management);
         _strategy.acceptManagement();
+
+        address usdcMorphoVaultOwner = 0xe5e2Baf96198c56380dDD5E992D7d1ADa0e989c0;
+        vm.startPrank(usdcMorphoVaultOwner);
+        IMetaMorpho(vault).setIsAllocator(address(_strategy), true);
+        vm.stopPrank();
 
         return address(_strategy);
     }
@@ -136,23 +164,18 @@ contract Setup is Test, IEvents {
         assertEq(_totalAssets, _totalDebt + _totalIdle, "!Added");
     }
 
+    function setFees(uint16 _protocolFee, uint16 _performanceFee) public {
+        vm.prank(management);
+        strategy.setPerformanceFee(_performanceFee);
+    }
+
+    function earnProfit(uint256 _amount) public virtual {
+        airdrop(asset, address(strategy), _amount);
+    }
+
     function airdrop(ERC20 _asset, address _to, uint256 _amount) public {
         uint256 balanceBefore = _asset.balanceOf(_to);
         deal(address(_asset), _to, balanceBefore + _amount);
-    }
-
-    function setFees(uint16 _protocolFee, uint16 _performanceFee) public {
-        address gov = IFactory(factory).governance();
-
-        // Need to make sure there is a protocol fee recipient to set the fee.
-        vm.prank(gov);
-        IFactory(factory).set_protocol_fee_recipient(gov);
-
-        vm.prank(gov);
-        IFactory(factory).set_protocol_fee_bps(_protocolFee);
-
-        vm.prank(management);
-        strategy.setPerformanceFee(_performanceFee);
     }
 
     function _setTokenAddrs() internal {
@@ -163,5 +186,6 @@ contract Setup is Test, IEvents {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        tokenAddrs["MORPHO"] = 0x58D97B57BB95320F9a05dC918Aef65434969c2B2;
     }
 }

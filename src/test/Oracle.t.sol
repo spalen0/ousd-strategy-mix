@@ -1,6 +1,6 @@
 pragma solidity ^0.8.18;
 
-import "forge-std/console2.sol";
+import "forge-std/console.sol";
 import {Setup} from "./utils/Setup.sol";
 
 import {StrategyAprOracle} from "../periphery/StrategyAprOracle.sol";
@@ -33,7 +33,6 @@ contract OracleTest is Setup {
         uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(_strategy, int256(_delta));
 
         assertGt(currentApr, positiveDebtChangeApr, "positive change");
-        */
 
         // TODO: Uncomment if there are setter functions to test.
         /**

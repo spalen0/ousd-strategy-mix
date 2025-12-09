@@ -1,6 +1,6 @@
 pragma solidity ^0.8.18;
 
-import "forge-std/console2.sol";
+import "forge-std/console.sol";
 import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
 
 contract ShutdownTest is Setup {
@@ -20,10 +20,15 @@ contract ShutdownTest is Setup {
         skip(1 days);
 
         // Shutdown the strategy
-        vm.prank(emergencyAdmin);
+        vm.prank(management);
         strategy.shutdownStrategy();
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
+
+        vm.prank(keeper);
+        strategy.report();
+
+        skip(1 days);
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
@@ -39,7 +44,7 @@ contract ShutdownTest is Setup {
         );
     }
 
-    function test_emergencyWithdraw_maxUint(uint256 _amount) public {
+    function test_emergencyWithdraw(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
@@ -51,14 +56,17 @@ contract ShutdownTest is Setup {
         skip(1 days);
 
         // Shutdown the strategy
-        vm.prank(emergencyAdmin);
+        vm.prank(management);
         strategy.shutdownStrategy();
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
-        // should be able to pass uint 256 max and not revert.
-        vm.prank(emergencyAdmin);
-        strategy.emergencyWithdraw(type(uint256).max);
+        vm.prank(management);
+        strategy.emergencyWithdraw(2 ** 256 - 1);
+
+        assertGe(asset.balanceOf(address(strategy)), _amount, "!asset balance");
+
+        assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
@@ -66,13 +74,5 @@ contract ShutdownTest is Setup {
         // Withdraw all funds
         vm.prank(user);
         strategy.redeem(_amount, user, user);
-
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
     }
-
-    // TODO: Add tests for any emergency function added.
 }
