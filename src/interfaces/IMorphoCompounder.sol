@@ -22,6 +22,7 @@ interface IMorphoCompounder is IStrategyInterface, IUniswapV3Swapper {
     function removeRewardToken(address _token) external;
     function getAllRewardTokens() external view returns (address[] memory);
     function setAuction(address _auction) external;
+    function setUseAuction(bool _useAuction) external;
     function setUniFees(address _token0, address _token1, uint24 _fee) external;
     function setSwapType(address _from, SwapType _swapType) external;
     function setMinAmountToSellMapping(

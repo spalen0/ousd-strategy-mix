@@ -3,15 +3,11 @@ pragma solidity ^0.8.18;
 
 import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
 import {Base4626Compounder, ERC20, SafeERC20} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {AuctionSwapper} from "@periphery/swappers/AuctionSwapper.sol";
+import {IAuction} from "@periphery/interfaces/IAuction.sol";
 import {IMetaMorpho, Id} from "./interfaces/Morpho/IMetaMorpho.sol";
 
-interface IAuction {
-    function want() external view returns (address);
-    function receiver() external view returns (address);
-    function kick(address _token) external returns (uint256);
-}
-
-contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
+contract MorphoOusd is Base4626Compounder, UniswapV3Swapper, AuctionSwapper {
     using SafeERC20 for ERC20;
 
     enum SwapType {
@@ -19,8 +15,6 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
         UNISWAP_V3,
         AUCTION
     }
-
-    address public auction;
 
     // Mapping to be set by management for any reward tokens.
     // This can be used to set different mins for different tokens
@@ -102,14 +96,12 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
     }
 
     function setAuction(address _auction) external onlyManagement {
-        if (_auction != address(0)) {
-            require(IAuction(_auction).want() == address(asset), "wrong want");
-            require(
-                IAuction(_auction).receiver() == address(this),
-                "wrong receiver"
-            );
-        }
-        auction = _auction;
+        require(IAuction(_auction).want() == address(asset), "wrong want");
+        _setAuction(_auction);
+    }
+
+    function setUseAuction(bool _useAuction) external onlyManagement {
+        _setUseAuction(_useAuction);
     }
 
     function setUniFees(
@@ -166,24 +158,12 @@ contract MorphoOusd is Base4626Compounder, UniswapV3Swapper {
         }
     }
 
-    function kickAuction(
-        address _token
-    ) external onlyKeepers returns (uint256) {
+    function kickAuction(address _token) external override returns (uint256) {
         require(swapType[_token] == SwapType.AUCTION, "!auction");
-        return _kickAuction(_token);
-    }
-
-    /**
-     * @dev Kick an auction for a given token.
-     * @param _from The token that was being sold.
-     */
-    function _kickAuction(address _from) internal virtual returns (uint256) {
         require(
-            _from != address(asset) && _from != address(vault),
+            _token != address(asset) && _token != address(vault),
             "cannot kick"
         );
-        uint256 _balance = ERC20(_from).balanceOf(address(this));
-        ERC20(_from).safeTransfer(auction, _balance);
-        return IAuction(auction).kick(_from);
+        return _kickAuction(_token);
     }
 }
