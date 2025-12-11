@@ -7,7 +7,7 @@ import {AuctionSwapper} from "@periphery/swappers/AuctionSwapper.sol";
 import {IAuction} from "@periphery/interfaces/IAuction.sol";
 import {IMetaMorpho, Id} from "./interfaces/Morpho/IMetaMorpho.sol";
 
-contract MorphoOusd is Base4626Compounder, UniswapV3Swapper, AuctionSwapper {
+contract MorphoOusd is UniswapV3Swapper, AuctionSwapper, Base4626Compounder {
     using SafeERC20 for ERC20;
 
     enum SwapType {
