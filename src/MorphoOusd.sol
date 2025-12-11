@@ -19,6 +19,7 @@ contract MorphoOusd is UniswapV3Swapper, AuctionSwapper, Base4626Compounder {
     // Mapping to be set by management for any reward tokens.
     // This can be used to set different mins for different tokens
     // or to set to uin256.max if selling a reward token is reverting
+    // it overrides the minAmountToSell variable checks from the AuctionSwapper contract.
     mapping(address => uint256) public minAmountToSellMapping;
 
     mapping(address => SwapType) public swapType;
@@ -158,12 +159,59 @@ contract MorphoOusd is UniswapV3Swapper, AuctionSwapper, Base4626Compounder {
         }
     }
 
+    /**
+     * @notice Kick an auction for a given token.
+     * @dev If the balance of the token is less than the minAmountToSellMapping,
+     *      the auction is not kicked. Swap type for token must be AUCTION.
+     * @param _token The address of the token to kick the auction for.
+     * @return The amount of tokens that were kicked into the auction.
+     */
     function kickAuction(address _token) external override returns (uint256) {
         require(swapType[_token] == SwapType.AUCTION, "!auction");
         require(
             _token != address(asset) && _token != address(vault),
             "cannot kick"
         );
-        return _kickAuction(_token);
+        if (
+            ERC20(_token).balanceOf(address(this)) >
+            minAmountToSellMapping[_token]
+        ) {
+            return _kickAuction(_token);
+        }
+    }
+
+    /**
+     * @notice Auction trigger implementation for CommonAuctionTrigger integration.
+     * @dev Returns whether an auction should be kicked and the encoded calldata to do so.
+     *      This enables automated auction triggering through external trigger systems.
+     *      Swap type for token must be AUCTION.
+     *      minAmountToSellMapping is used instead of minAmountToSell.
+     * @param _from The token that could be sold in an auction.
+     * @return shouldKick True if an auction should be kicked for this token.
+     * @return data Encoded calldata for `kickAuction(_from)` if shouldKick is true,
+     *              otherwise a descriptive error message explaining why not.
+     */
+    function auctionTrigger(
+        address _from
+    ) external view override returns (bool shouldKick, bytes memory data) {
+        address _auction = auction;
+        if (_auction == address(0)) {
+            return (false, bytes("No auction set"));
+        }
+        if (!useAuction) {
+            return (false, bytes("Auctions disabled"));
+        }
+        if (swapType[_from] != SwapType.AUCTION) {
+            return (false, bytes("Swap type is not AUCTION"));
+        }
+
+        uint256 kickableAmount = kickable(_from);
+        if (
+            kickableAmount != 0 &&
+            kickableAmount >= minAmountToSellMapping[_from]
+        ) {
+            return (true, abi.encodeCall(this.kickAuction, (_from)));
+        }
+        return (false, bytes("not enough kickable"));
     }
 }

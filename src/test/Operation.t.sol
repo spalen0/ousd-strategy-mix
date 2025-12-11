@@ -305,15 +305,11 @@ contract OperationTest is Setup {
         assertTrue(Auction(auction).isActive(swapToken), "!active");
     }
 
-    function test_setAuction_happyPath() public {
-        // Create a valid auction with correct want token (asset) and receiver (strategy)
+    function test_setAuction() public {
         address auctionAddress = _createAuction(address(asset));
 
-        // Management should be able to set the auction
         vm.prank(management);
         IMorphoCompounder(address(strategy)).setAuction(auctionAddress);
-
-        // Verify auction was set
         assertEq(
             IMorphoCompounder(address(strategy)).auction(),
             auctionAddress,
@@ -322,10 +318,8 @@ contract OperationTest is Setup {
     }
 
     function test_setAuction_revertsForUnauthorizedUser() public {
-        // Create a valid auction
         address auctionAddress = _createAuction(address(asset));
 
-        // Random user should not be able to set auction
         address randomUser = address(0x123);
         vm.prank(randomUser);
         vm.expectRevert("!management");
@@ -333,37 +327,29 @@ contract OperationTest is Setup {
     }
 
     function test_setAuction_revertsForWrongWant() public {
-        // Create an auction with wrong want token (not asset)
         address wrongWant = tokenAddrs["DAI"];
         address auctionAddress = _createAuction(wrongWant);
 
-        // Management should not be able to set auction with wrong want
         vm.prank(management);
         vm.expectRevert("wrong want");
         IMorphoCompounder(address(strategy)).setAuction(auctionAddress);
     }
 
-    function test_setUseAuction_happyPath() public {
-        // First set up a valid auction
+    function test_setUseAuction() public {
         address auctionAddress = _createAuction(address(asset));
 
         vm.startPrank(management);
         IMorphoCompounder(address(strategy)).setAuction(auctionAddress);
 
-        // Setting auction automatically enables useAuction, so let's disable it
         IMorphoCompounder(address(strategy)).setUseAuction(false);
 
-        // Verify useAuction is false
         assertEq(
             AuctionSwapper(address(strategy)).useAuction(),
             false,
             "!useAuction should be false"
         );
 
-        // Enable it again
         IMorphoCompounder(address(strategy)).setUseAuction(true);
-
-        // Verify useAuction is true
         assertEq(
             AuctionSwapper(address(strategy)).useAuction(),
             true,
@@ -457,6 +443,91 @@ contract OperationTest is Setup {
             0,
             "!swapType"
         );
+    }
+
+    function test_setSwapType() public {
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setSwapType(
+            swapToken,
+            IMorphoCompounder.SwapType.AUCTION
+        );
+        assertEq(
+            uint256(IMorphoCompounder(address(strategy)).swapType(swapToken)),
+            uint256(IMorphoCompounder.SwapType.AUCTION),
+            "!swapType"
+        );
+    }
+
+    function test_setSwapType_revertsForUnauthorizedUser() public {
+        vm.prank(address(0x123));
+        vm.expectRevert("!management");
+        IMorphoCompounder(address(strategy)).setSwapType(
+            swapToken,
+            IMorphoCompounder.SwapType.AUCTION
+        );
+    }
+
+    function test_auctionTrigger_uses_minAmountToSellMapping() public {
+        address auctionAddress = _createAuction(address(asset));
+
+        address rewardToken = tokenAddrs["MORPHO"];
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setAuction(auctionAddress);
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setSwapType(
+            rewardToken,
+            IMorphoCompounder.SwapType.AUCTION
+        );
+
+        uint256 amount = 1000e6;
+        airdrop(ERC20(rewardToken), address(strategy), amount);
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setMinAmountToSellMapping(
+            rewardToken,
+            amount + 1
+        );
+        (bool shouldKick, bytes memory data) = IMorphoCompounder(
+            address(strategy)
+        ).auctionTrigger(rewardToken);
+        assertFalse(shouldKick);
+        assertEq(data, bytes("not enough kickable"));
+    }
+
+    function test_auctionTrigger_revertsForAuctionsDisabled() public {
+        address auctionAddress = _createAuction(address(asset));
+        address rewardToken = tokenAddrs["MORPHO"];
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setAuction(auctionAddress);
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setSwapType(
+            rewardToken,
+            IMorphoCompounder.SwapType.AUCTION
+        );
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setUseAuction(false);
+
+        (bool shouldKick, bytes memory data) = IMorphoCompounder(
+            address(strategy)
+        ).auctionTrigger(rewardToken);
+        assertFalse(shouldKick);
+        assertEq(data, bytes("Auctions disabled"));
+    }
+
+    function test_auctionTrigger_revertsForWrongSwapType() public {
+        address auctionAddress = _createAuction(address(asset));
+        address rewardToken = tokenAddrs["MORPHO"];
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setAuction(auctionAddress);
+        vm.prank(management);
+        IMorphoCompounder(address(strategy)).setSwapType(
+            rewardToken,
+            IMorphoCompounder.SwapType.UNISWAP_V3
+        );
+        (bool shouldKick, bytes memory data) = IMorphoCompounder(
+            address(strategy)
+        ).auctionTrigger(rewardToken);
+        assertFalse(shouldKick);
+        assertEq(data, bytes("Swap type is not AUCTION"));
     }
 
     function _createAuction(address _want) internal returns (address) {

@@ -2,9 +2,14 @@
 pragma solidity ^0.8.18;
 
 import {IUniswapV3Swapper} from "@periphery/swappers/interfaces/IUniswapV3Swapper.sol";
+import {IAuctionSwapper} from "@periphery/swappers/interfaces/IAuctionSwapper.sol";
 import {IStrategyInterface} from "./IStrategyInterface.sol";
 
-interface IMorphoCompounder is IStrategyInterface, IUniswapV3Swapper {
+interface IMorphoCompounder is
+    IUniswapV3Swapper,
+    IAuctionSwapper,
+    IStrategyInterface
+{
     enum SwapType {
         NULL,
         UNISWAP_V3,
@@ -12,7 +17,6 @@ interface IMorphoCompounder is IStrategyInterface, IUniswapV3Swapper {
     }
 
     // State Variables
-    function auction() external view returns (address);
     function minAmountToSellMapping(address) external view returns (uint256);
     function swapType(address) external view returns (SwapType);
     function allRewardTokens(uint256) external view returns (address);
@@ -29,5 +33,4 @@ interface IMorphoCompounder is IStrategyInterface, IUniswapV3Swapper {
         address _token,
         uint256 _amount
     ) external;
-    function kickAuction(address _token) external returns (uint256);
 }
