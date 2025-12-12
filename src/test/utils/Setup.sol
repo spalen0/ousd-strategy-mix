@@ -118,7 +118,9 @@ contract Setup is Test, IEvents {
 
         address usdcMorphoVaultOwner = 0xe5e2Baf96198c56380dDD5E992D7d1ADa0e989c0;
         vm.startPrank(usdcMorphoVaultOwner);
-        IMetaMorpho(vault).setIsAllocator(address(_strategy), true);
+        IMetaMorpho mmvault = IMetaMorpho(address(vault));
+        mmvault.setIsAllocator(address(_strategy), true);
+        mmvault.setSupplyQueue(new Id[](0));
         vm.stopPrank();
 
         return address(_strategy);
