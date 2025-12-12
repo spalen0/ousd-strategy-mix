@@ -493,7 +493,7 @@ contract OperationTest is Setup {
         assertEq(data, bytes("not enough kickable"));
     }
 
-    function test_auctionTrigger_revertsForAuctionsDisabled() public {
+    function test_auctionTrigger_returnsFalseForAuctionsDisabled() public {
         address auctionAddress = _createAuction(address(asset));
         address rewardToken = tokenAddrs["MORPHO"];
         vm.prank(management);
@@ -513,7 +513,7 @@ contract OperationTest is Setup {
         assertEq(data, bytes("Auctions disabled"));
     }
 
-    function test_auctionTrigger_revertsForWrongSwapType() public {
+    function test_auctionTrigger_returnsFalseForWrongSwapType() public {
         address auctionAddress = _createAuction(address(asset));
         address rewardToken = tokenAddrs["MORPHO"];
         vm.prank(management);
